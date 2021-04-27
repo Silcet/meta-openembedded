@@ -1,0 +1,72 @@
+From bf785e986cdcee6ccdbdfa1652f83829aecc5f06 Mon Sep 17 00:00:00 2001
+From: Silcet <camorga1@gmail.com>
+Date: Tue, 27 Apr 2021 06:02:27 +0000
+Subject: [PATCH] setup: only make one reference to env
+
+If sys.executable happens to be '/usr/bin/env python' or something
+similar, the setup script will result in 'ufw' getting /usr/bin/env
+repeated on the top line.  This causes an error at runtime.  Perform a
+quick sanity check on sys.executable before doing the substitution.
+
+While we're at it, change the default value of 'exe' to the one we either
+detected or specified on the build line.
+
+Upstream-Status: Inappropriate [ embedded specific ]
+
+Signed-off-by: Joe MacDonald <joe_macdonald@mentor.com>
+
+The patch was imported from the OpenEmbedded git server
+(git://git.openembedded.org/openembedded) as of commit id
+2cc1bd9dd060f5002c2fde7aacba86fe230c12af.
+
+A previous change had modified the way the python shebang was updated to
+follow the same version as the one used to call setup.py. However, it
+used a regex that was not matching anymore. To fix this, the python
+version is read using sys.version_info and then appended to the original
+shebang, resulting in "#!/usr/bin/env pythonX" (for X 2 or 3).
+
+Signed-off-by: Silcet <camorga1@gmail.com>
+---
+ setup.py | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/setup.py b/setup.py
+index 2343bc9..784bf58 100644
+--- a/setup.py
++++ b/setup.py
+@@ -64,7 +64,7 @@ class Install(_install, object):
+         real_sharedir = os.path.join(real_prefix, 'share', 'ufw')
+ 
+         # Update the modules' paths
+-        for fn in [ 'common.py' ]:
++        for fn in [ 'common.py', 'util.py' ]:
+             # 'staging' is used with just 'install' but build_lib is used when
+             # using 'build'. We could probably override 'def build()' but this
+             # at least works
+@@ -98,6 +98,11 @@ class Install(_install, object):
+                                  "s%#SHARE_DIR#%" + real_sharedir + "%g",
+                                  f])
+ 
++                subprocess.call(["sed",
++                                 "-i.jjm",
++                                 "s%/sbin/iptables%" + iptables_exe + "%g",
++                                 f])
++
+                 if fn == 'common.py' and 'UFW_SKIP_CHECKS' in os.environ and \
+                    os.environ['UFW_SKIP_CHECKS'] != '':
+                     print("Updating do_checks")
+@@ -123,10 +128,11 @@ class Install(_install, object):
+             self.mkpath(os.path.dirname(f))
+ 
+         # update the interpreter to that of the one the user specified for setup
+-        print("Updating staging/ufw to use %s" % (sys.executable))
++        python_major = sys.version_info.major
++        print("Updating staging/ufw to use (python%s)" % (python_major))
+         subprocess.call(["sed",
+-                         "-i",
+-                         "1s%^#.*python.*%#! /usr/bin/env " + sys.executable + "%g",
++                         "-i.jjm",
++                         "1s%^#.*python.*%#! " + sys.executable + "%g",
+                          'staging/ufw'])
+         self.copy_file('staging/ufw', script)
+         self.copy_file('doc/ufw.8', manpage)
